@@ -1,9 +1,4 @@
-/**
- * Template base para implementação de Relógios Vetoriais (MPI)
- * -------------------------------------------------------------
- * Implementar, tomando como base a sequência de operações da figura
- * do link: https://drive.google.com/file/d/1IOAJPpJWUoRC0kygZKr6ERe0hpIICRTP/view?usp=sharing
- *
+/*
  * Compilação: mpicc -o main main.c
  * Execução:   mpiexec -n 3 --oversubscribe ./main
  */
@@ -34,44 +29,27 @@ void PrintClock(const char *acao, Clock *clock) {
  */
 void Event(Clock *clock) {
     int pid;
-    MPI_Comm_rank(MPI_COMM_WORLD, &pid);
-    clock->p[pid]++;
+    MPI_Comm_rank(MPI_COMM_WORLD, &pid); // Obtem o rank e salva na variavel pid
+    clock->p[pid]++; // Incrementa o clock local
     
     // No final, imprime relógio atualizado
     PrintClock("Evento interno", clock);
 }
 
-/*
- * Envio de mensagem.
- * Deve:
- *   1. Obter o rank.
- *   2. Incrementar clock local (evento de envio).
- *   3. Enviar clock->p via MPI_Send.
- */
 void Send(int dest, Clock *clock) {
     int pid;
-    MPI_Comm_rank(MPI_COMM_WORLD, &pid);
-    clock->p[pid]++;
-    MPI_Send(clock->p, 3, MPI_INT, dest, 0, MPI_COMM_WORLD);
-    // TODO: incrementar clock local e enviar clock->p via MPI_Send
-    
+    MPI_Comm_rank(MPI_COMM_WORLD, &pid); // Obtem o rank e salva na variavel pid
+    clock->p[pid]++; // Incrementa o clock local
+    MPI_Send(clock->p, 3, MPI_INT, dest, 0, MPI_COMM_WORLD); // Envia o clock local via MPI_Send
+
     // No final, imprime relógio atualizado:
     PrintClock("Envio de mensagem", clock);
 }
 
-/*
- * Recebimento de mensagem.
- * Deve:
- *   1. Obter o rank.
- *   2. Receber vetor remoto via MPI_Recv.
- *   3. Incrementar clock local (evento de recebimento).
- *   4. Fazer fusão (max elemento a elemento) com vetor recebido.
- */
 void Receive(int src, Clock *clock) {
     int pid;
-    MPI_Comm_rank(MPI_COMM_WORLD, &pid);
-    // TODO: receber vetor e atualizar clock local
-    
+    MPI_Comm_rank(MPI_COMM_WORLD, &pid); // Obtem o rank e salva na variavel pid
+
     // No final, imprime relógio atualizado
     PrintClock("Recebimento de mensagem", clock);
 }
@@ -86,19 +64,18 @@ void process0() {
     PrintClock("Estado inicial", &clock);
 
     Event(&clock);
-    // TODO: Send/Receive conforme diagrama
 }
 
 void process1() {
     Clock clock = {{0,0,0}};
     PrintClock("Estado inicial", &clock);
-    // TODO
+
 }
 
 void process2() {
     Clock clock = {{0,0,0}};
     PrintClock("Estado inicial", &clock);
-    // TODO
+
 }
 
 int main(void) {
@@ -118,4 +95,3 @@ int main(void) {
     MPI_Finalize();
     return 0;
 }
-
