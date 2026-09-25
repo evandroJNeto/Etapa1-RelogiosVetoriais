@@ -1,7 +1,9 @@
 /*
+ * Mizael Paris Leite
+ * Evandro José dos Santos Neto
  * Compilação: mpicc -o main main.c
  * Execução:   mpiexec -n 3 --oversubscribe ./main
- */
+*/
 
 #include <stdio.h>
 #include <string.h>
@@ -15,7 +17,7 @@ typedef struct Clock {
 /*
  * Imprime o estado atual do relógio vetorial.
  * Mostra: qual processo realizou a atualização e o vetor resultante.
- */
+*/
 void PrintClock(const char *acao, Clock *clock) {
     int pid;
     MPI_Comm_rank(MPI_COMM_WORLD, &pid);
@@ -26,7 +28,7 @@ void PrintClock(const char *acao, Clock *clock) {
 /*
  * Evento interno (sem comunicação).
  * Incrementa o contador local do processo.
- */
+*/
 void Event(Clock *clock) {
     int pid;
     MPI_Comm_rank(MPI_COMM_WORLD, &pid); // Obtem o rank e salva na variavel pid
@@ -48,7 +50,16 @@ void Send(int dest, Clock *clock) {
 
 void Receive(int src, Clock *clock) {
     int pid;
+    int recebe[3]; // Vetor que vai receber a informação do clock de outro processo
     MPI_Comm_rank(MPI_COMM_WORLD, &pid); // Obtem o rank e salva na variavel pid
+    clock->p[pid]++; // Incrementa o clock local
+    MPI_Recv(recebe, 3, MPI_INT, src, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE); // Recebe as informações do clock de outro processo
+    
+    for (int i= 0; i < 3; i++) { // Laço para comparar os valores e substituir pelo maior
+        if (clock->p[i] < recebe[i]) {
+            clock->p[i] = recebe[i];
+        }
+    }
 
     // No final, imprime relógio atualizado
     PrintClock("Recebimento de mensagem", clock);
@@ -57,7 +68,7 @@ void Receive(int src, Clock *clock) {
 /*
  * Cada processo define sua sequência de eventos e comunicações
  * conforme o diagrama da figura de referência.
- */
+*/
 
 void process0() {
     Clock clock = {{0,0,0}};
