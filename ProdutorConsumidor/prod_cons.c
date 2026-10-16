@@ -1,64 +1,164 @@
 /*
- * Compilação: gcc -g -Wall -o prod_cons prod_cons_clocks.c -lpthread
+ * Compilação: gcc -g -Wall -o prod_cons prod_cons.c -lpthread
  * Execução:   ./prod_cons
+ *
+ * Para trocar o cenário, altere o valor de CENARIO abaixo e recompile.
  */
 
 #include <stdio.h>
-#include <string.h>
+#include <stdlib.h>
 #include <pthread.h>
-#include <time.h>
-#include <semaphore.h>
+#include <unistd.h>
 
-#define PRO_NUM 3 // quantidade de threads produtoras
-#define CON_NUM 3 // quantidade de threads consumidoras
-#define CAPAC_FILA 5 
+#define BUFFER_SIZE 5       // Tamanho reduzido para forçar o encher/esvaziar da fila rapidamente
+#define NUM_PRODUTORES 3    // Quantidade de threads produtoras
+#define NUM_CONSUMIDORES 3  // Quantidade de threads consumidoras
 
-/* Estrutura do relógio vetorial (3 processos). */
+// DEFINA O CENÁRIO AQUI:
+// 1 = Cenário Fila Cheia (Produtores rápidos, Consumidores lentos)
+// 2 = Cenário Fila Vazia (Produtores lentos, Consumidores rápidos)
+#define CENARIO 1
+
+/* Estrutura do relógio vetorial (baseado no main.c) */
 typedef struct Clock {
     int p[3];
-    int id;
+    int prod_id;    // Identificador para sabermos qual thread gerou
 } Clock;
 
-Clock clockQueue[CAPAC_FILA]; // Fila de relógios vetoriais
-int clockCount = 0; // Contador de relógios na fila
+Clock queue[BUFFER_SIZE];
+int count = 0;
 
-pthread_mutex_t mutex; // Mutex para proteger o acesso à fila de relógios
-pthread_cond_t condFull; // Condição para fila cheia
-pthread_cond_t condEmpty; // Condição para fila vazia
+pthread_mutex_t mutex;
+pthread_cond_t condFull;  // Usado para bloquear produção quando cheia
+pthread_cond_t condEmpty; // Usado para bloquear consumo quando vazia
 
-Clock getClock() {
+/*
+ * Função equivalente ao getTask() do pth_pool.c.
+ * Remove um relógio da fila.
+ */
+Clock getClock(int id) {
     pthread_mutex_lock(&mutex);
-    
-    while (clockCount == 0) {
-        printf("A fila está vazia no atual momento\n");
+
+    while (count == 0) {
+        // Comprovação visual para o Cenário 2 (Fila Vazia)
+        printf("[Consumidor %d] Fila VAZIA! Variável de condição bloqueando consumo...\n", id);
         pthread_cond_wait(&condEmpty, &mutex);
     }
-    
-    Clock clock = clockQueue[0];
-    for (int i = 0; i < clockCount - 1; i++) {
-        clockQueue[i] = clockQueue[i + 1];
+
+    Clock clock = queue[0];
+    for (int i = 0; i < count - 1; i++) {
+        queue[i] = queue[i+1];
     }
-    clockCount--;
-    
+    count--;
+
     pthread_mutex_unlock(&mutex);
     pthread_cond_signal(&condFull);
+
     return clock;
 }
 
-int main(void) {
-    int my_rank;
-    int comm_sz;
+/*
+ * Função equivalente ao submitTask() do pth_pool.c.
+ * Adiciona um relógio na fila.
+ */
+void submitClock(Clock clock, int id) {
+    pthread_mutex_lock(&mutex);
 
-    MPI_Init(NULL, NULL);
-    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+    while (count == BUFFER_SIZE) {
+        // Comprovação visual para o Cenário 1 (Fila Cheia)
+        printf("[Produtor %d] Fila CHEIA! Variável de condição bloqueando produção...\n", id);
+        pthread_cond_wait(&condFull, &mutex);
+    }
 
-    if (my_rank == 0)
-        process0();
-    else if (my_rank == 1)
-        process1();
-    else if (my_rank == 2)
-        process2();
+    queue[count] = clock;
+    count++;
 
-    MPI_Finalize();
+    pthread_mutex_unlock(&mutex);
+    pthread_cond_signal(&condEmpty);
+}
+
+/* Thread Produtora */
+void* producerThread(void* arg) {
+    int id = *(int*)arg;
+    Clock clock = {{0, 0, 0}, id}; // Inicializa vetor zerado
+
+    while (1) {
+        // Incrementa o relógio na posição da própria thread simulando um evento
+        clock.p[id]++;
+
+        submitClock(clock, id);
+        printf("[Produtor %d] Produziu e enfileirou -> Clock = (%d, %d, %d)\n",
+                id, clock.p[0], clock.p[1], clock.p[2]);
+
+        // Controle de taxa de produção baseado nos cenários solicitados
+        if (CENARIO == 1) {
+            sleep(1); // Produz rápido (1s)
+        } else {
+            sleep(2); // Produz lento (2s)
+        }
+    }
+    return NULL;
+}
+
+/* Thread Consumidora */
+void* consumerThread(void* arg) {
+    int id = *(int*)arg;
+
+    while (1) {
+        Clock clock = getClock(id);
+
+        // Imprime a saída padrão dos relógios consumidos
+        printf("   [Consumidor %d] Consumiu da fila -> Clock = (%d, %d, %d) [Gerado pelo Produtor %d]\n",
+                id, clock.p[0], clock.p[1], clock.p[2], clock.prod_id);
+
+        // Controle de taxa de consumo baseado nos cenários solicitados
+        if (CENARIO == 1) {
+            sleep(2); // Consome lento (2s)
+        } else {
+            sleep(1); // Consome rápido (1s)
+        }
+    }
+    return NULL;
+}
+
+int main(int argc, char* argv[]) {
+    // Inicialização do Mutex e Variáveis de Condição
+    pthread_mutex_init(&mutex, NULL);
+    pthread_cond_init(&condEmpty, NULL);
+    pthread_cond_init(&condFull, NULL);
+
+    pthread_t produtores[NUM_PRODUTORES];
+    pthread_t consumidores[NUM_CONSUMIDORES];
+    int ids[3] = {0, 1, 2}; // IDs das threads 0, 1 e 2
+
+    printf("\n--- INICIANDO EXECUÇÃO: CENÁRIO %d ---\n", CENARIO);
+    if (CENARIO == 1) {
+        printf("A fila FICARÁ CHEIA. Produtores gerarão relógios mais rápido que o consumo.\n\n");
+    } else {
+        printf("A fila FICARÁ VAZIA. Consumidores retirarão relógios mais rápido que a produção.\n\n");
+    }
+
+    // Criando grupo de 3 produtores e 3 consumidores
+    for (int i = 0; i < NUM_PRODUTORES; i++) {
+        pthread_create(&produtores[i], NULL, producerThread, &ids[i]);
+    }
+    for (int i = 0; i < NUM_CONSUMIDORES; i++) {
+        pthread_create(&consumidores[i], NULL, consumerThread, &ids[i]);
+    }
+
+    // O programa roda num loop infinito por conta do while(1) das threads.
+    // Usar 'Ctrl+C' para finalizar a simulação.
+    for (int i = 0; i < NUM_PRODUTORES; i++) {
+        pthread_join(produtores[i], NULL);
+    }
+    for (int i = 0; i < NUM_CONSUMIDORES; i++) {
+        pthread_join(consumidores[i], NULL);
+    }
+
+    // Destruição do mutex e vars de condição ao finalizar
+    pthread_mutex_destroy(&mutex);
+    pthread_cond_destroy(&condEmpty);
+    pthread_cond_destroy(&condFull);
+
     return 0;
 }
