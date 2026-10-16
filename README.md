@@ -4,7 +4,7 @@ Alunos: Evandro José dos Santos Neto, Kelvin Fagundes Gomes de Souza e Mizael P
 
 Este repositório contém a Etapa 1 e a Etapa 2 do trabalho.
 
-# Produtor-Consumidor (prod_cons.c)
+## Produtor-Consumidor (prod_cons.c)
 
 Produtores e consumidores (3 de cada) trocam relógios vetoriais por uma fila de tamanho 5, sincronizada com mutex e variáveis de condição. Mude CENARIO no código para escolher:
 
